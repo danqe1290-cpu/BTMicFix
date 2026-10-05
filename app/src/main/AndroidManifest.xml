@@ -69,6 +69,11 @@
             </intent-filter>
         </service>
 
+        <!-- Keeps the process (and so the mic route) alive while routing is on -->
+        <service
+            android:name=".service.RoutingKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
     </application>
 

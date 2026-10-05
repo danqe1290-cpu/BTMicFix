@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity(), BluetoothStateReceiver.BluetoothConnec
         enableEdgeToEdge()
 
         // Initialize managers
-        audioRoutingManager = AudioRoutingManager(this)
+        audioRoutingManager = AudioRoutingManager.getInstance(this)
         shizukuManager = ShizukuManager()
         companionManager = DeviceCompanionManager(this)
         preferences = Preferences(this)
@@ -115,15 +115,22 @@ class MainActivity : ComponentActivity(), BluetoothStateReceiver.BluetoothConnec
     // -- BluetoothConnectionListener --
 
     override fun onBluetoothDeviceConnected(device: BluetoothDevice) {
+        // Any Bluetooth device (watch, TV, BLE accessory) can trigger this, so it
+        // must not switch routing on by itself — it only re-checks the user's choice.
         if (preferences.autoRouteEnabled) {
-            Logger.i("Auto-routing triggered by BT connect")
-            audioRoutingManager.routeToFirstAvailableBluetooth()
+            Logger.i("BT connect: re-checking routing")
+            audioRoutingManager.onBluetoothConnectionChanged()
         }
     }
 
     override fun onBluetoothDeviceDisconnected(device: BluetoothDevice) {
-        Logger.i("BT device disconnected, clearing routing")
-        audioRoutingManager.clearRouting()
+        // BUGFIX: this used to clear routing whenever ANY Bluetooth device
+        // disconnected. Phones connect/disconnect background Bluetooth/BLE devices
+        // at any time (observed together with Wi-Fi changes on a Galaxy S23 FE),
+        // which silently killed the route.
+        // Now we only re-check; the route is released if our earbuds are really gone.
+        Logger.i("BT disconnect: re-checking routing")
+        audioRoutingManager.onBluetoothConnectionChanged()
     }
 
     /**

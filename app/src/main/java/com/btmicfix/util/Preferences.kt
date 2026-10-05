@@ -18,7 +18,13 @@ class Preferences(context: Context) {
         private const val KEY_AUTO_ROUTE_ENABLED = "auto_route_enabled"
         private const val KEY_SHIZUKU_FALLBACK_ENABLED = "shizuku_fallback_enabled"
         private const val KEY_SETUP_COMPLETED = "setup_completed"
+        private const val KEY_ROUTING_WANTED = "routing_wanted"
     }
+
+    /** True while the user has routing switched on (survives process restarts). */
+    var routingWanted: Boolean
+        get() = prefs.getBoolean(KEY_ROUTING_WANTED, false)
+        set(value) = prefs.edit { putBoolean(KEY_ROUTING_WANTED, value) }
 
     var pairedDeviceAddress: String?
         get() = prefs.getString(KEY_PAIRED_DEVICE_ADDRESS, null)
