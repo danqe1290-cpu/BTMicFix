@@ -28,11 +28,16 @@ import kotlinx.coroutines.flow.asStateFlow
  * switch that enables the Bluetooth microphone. By calling setCommunicationDevice()
  * before the AI app starts recording, we force the system to make the switch.
  *
+ * Keeping the route: Android 11+ takes MODE_IN_COMMUNICATION away from an app
+ * that is not playing or capturing voice audio itself, which silently drops the
+ * route a few seconds after it is set (or as soon as another app, e.g. Voice
+ * Access, starts recording). [SilentVoicePlayer] plays inaudible voice audio
+ * while routing is on so the system keeps treating us as being in a call.
+ *
  * Self-healing: once the user enables routing ([routingWanted] = true), the route is
  * re-applied automatically whenever the system drops it — the audio mode is reset,
- * the communication device changes, or the earbuds' audio device is re-created
- * (which can happen when unrelated Bluetooth/Wi-Fi activity occurs on some
- * Samsung devices). Only the user's own "Disable" clears that intent.
+ * the communication device changes, or the earbuds' audio device is re-created.
+ * Only the user's own "Disable" clears that intent.
  *
  * A single process-wide instance is shared by the Activity and the services
  * (see [getInstance]) so they never disagree about the routing state.
@@ -60,6 +65,9 @@ class AudioRoutingManager private constructor(context: Context) {
 
     /** True while the phone's audio mode is in communication because of us. */
     private var routeApplied = false
+
+    /** Keeps Android's audio-mode watchdog from taking the mode (and route) away. */
+    private val silentPlayer = SilentVoicePlayer()
 
     /**
      * The user's intent. True after the user enables routing, false only after
@@ -325,6 +333,7 @@ class AudioRoutingManager private constructor(context: Context) {
         val routeIntact = isBluetooth(current) &&
             audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
         if (routeIntact) {
+            if (routeApplied && !silentPlayer.isPlaying) silentPlayer.start()
             if (_routingState.value !is RoutingState.Active) {
                 currentRoutedDevice = current
                 _routingState.value = RoutingState.Active(nameOf(current!!))
@@ -372,6 +381,8 @@ class AudioRoutingManager private constructor(context: Context) {
             if (success) {
                 currentRoutedDevice = device
                 routeApplied = true
+                // Must start right away, within the system's grace period.
+                silentPlayer.start()
                 val state = RoutingState.Active(deviceName)
                 _routingState.value = state
                 Logger.i("✓ Routing active: $deviceName")
@@ -380,6 +391,8 @@ class AudioRoutingManager private constructor(context: Context) {
                 val state = RoutingState.Failed("setCommunicationDevice returned false")
                 _routingState.value = state
                 Logger.e("✗ setCommunicationDevice failed for $deviceName")
+                silentPlayer.stop()
+                routeApplied = false
                 audioManager.mode = AudioManager.MODE_NORMAL
                 state
             }
@@ -387,6 +400,8 @@ class AudioRoutingManager private constructor(context: Context) {
             val state = RoutingState.Failed(e.message ?: "Unknown error")
             _routingState.value = state
             Logger.e("✗ Exception during routing", e)
+            silentPlayer.stop()
+            routeApplied = false
             try {
                 audioManager.mode = AudioManager.MODE_NORMAL
             } catch (resetError: Exception) {
@@ -398,6 +413,7 @@ class AudioRoutingManager private constructor(context: Context) {
 
     /** Undo the route at the system level (does not change the user's intent). */
     private fun releaseRoute() {
+        silentPlayer.stop()
         try {
             audioManager.clearCommunicationDevice()
             audioManager.mode = AudioManager.MODE_NORMAL

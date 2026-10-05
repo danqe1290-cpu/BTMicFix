@@ -126,8 +126,7 @@ class MainActivity : ComponentActivity(), BluetoothStateReceiver.BluetoothConnec
     override fun onBluetoothDeviceDisconnected(device: BluetoothDevice) {
         // BUGFIX: this used to clear routing whenever ANY Bluetooth device
         // disconnected. Phones connect/disconnect background Bluetooth/BLE devices
-        // at any time (observed together with Wi-Fi changes on a Galaxy S23 FE),
-        // which silently killed the route.
+        // (watches, TVs, accessories) at any time, which silently killed the route.
         // Now we only re-check; the route is released if our earbuds are really gone.
         Logger.i("BT disconnect: re-checking routing")
         audioRoutingManager.onBluetoothConnectionChanged()
